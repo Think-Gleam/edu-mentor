@@ -1,18 +1,18 @@
-# Use the official Python image
+# Use lightweight Python image
 FROM python:3.10-slim
 
-# Set the working directory inside the container
+# Set the working directory
 WORKDIR /app
 
-# Copy the requirements file and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy files
+COPY requirements.txt ./requirements.txt
+COPY . .
 
-# Copy your actual application code
-COPY app.py .
+# Install dependencies
+RUN pip install -r requirements.txt
 
-# Tell Cloud Run which port Streamlit uses
+# Expose the port Streamlit uses
 EXPOSE 8080
 
-# The command to start the Streamlit app
-CMD ["streamlit", "run", "app.py", "--server.port=8080", "--server.address=0.0.0.0"]
+# Command to run the app
+CMD ["streamlit", "run", "lms_app.py", "--server.port=8080", "--server.address=0.0.0.0"]
