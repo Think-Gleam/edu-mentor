@@ -43,139 +43,491 @@ if "current_page" not in st.session_state:
 
 # --- PAGE 1: REAL AUTHENTICATION (Login & Sign Up) ---
 def show_auth_page():
+    """Modern, clean authentication page with Login and Sign Up tabs"""
+    
+    # Header
     st.title("🚀 Welcome to EduMentor")
-    st.markdown("Log in or create a real account to access your adaptive learning dashboard.")
+    st.markdown("Your personalized adaptive learning platform for students across Pakistan and beyond.")
     
     # Create two tabs for Login and Sign Up
     tab_login, tab_signup = st.tabs(["🔐 Log In", "📝 Sign Up"])
     
-    # --- LOG IN TAB ---
+    # ==================== LOG IN TAB ====================
     with tab_login:
         st.subheader("Welcome Back!")
-        login_email = st.text_input("Email", key="login_email")
-        login_password = st.text_input("Password", type="password", key="login_password")
+        st.markdown("Sign in to your EduMentor account and continue learning.")
         
-        if st.button("Log In"):
-            with st.spinner("Authenticating with Supabase..."):
-                try:
-                    # Live Supabase Login Call
-                    response = supabase.auth.sign_in_with_password({"email": login_email, "password": login_password})
-                    
-                    # Save the real user data to the session
-                    st.session_state.logged_in = True
-                    st.session_state.user_id = response.user.id
-                    
-                    # For now, give them a default profile (we will build the real profile saver next!)
-                    st.session_state.user_profile = {
-                        "name": login_email.split('@')[0],
-                        "age": 15,
-                        "level": "Beginner",
-                        "interests": "Technology",
-                        "time_commit": "30 mins"
-                    }
-                    
-                    st.session_state.current_page = "dashboard"
-                    st.success("Login Successful!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Login failed: Invalid email or password.")
+        # FIX 1: Wrap in st.form to solve the browser Auto-Fill bug!
+        with st.form("login_form"):
+            login_email = st.text_input("Email", placeholder="your@email.com")
+            login_password = st.text_input("Password", type="password", placeholder="••••••••")
+            submit_login = st.form_submit_button("🔓 Log In", use_container_width=True)
+            
+            if submit_login:
+                if not login_email or not login_password:
+                    st.error("❌ Please enter both email and password.")
+                else:
+                    with st.spinner("🔐 Authenticating with Supabase..."):
+                        try:
+                            # Live Supabase Login Call
+                            response = supabase.auth.sign_in_with_password({
+                                "email": login_email, 
+                                "password": login_password
+                            })
+                            
+                            st.session_state.logged_in = True
+                            st.session_state.user_id = response.user.id
+                            
+                            # Fetch real profile from database
+                            profile_response = supabase.table("profiles").select("*").eq("id", response.user.id).execute()
+                            
+                            if len(profile_response.data) > 0:
+                                st.session_state.user_profile = profile_response.data[0]
+                                
+                                # FIX 2: Explicitly check the boolean to break the infinite loop
+                                if st.session_state.user_profile.get("onboarding_complete") == True:
+                                    st.session_state.current_page = "dashboard"
+                                else:
+                                    st.session_state.current_page = "onboarding"
+                            else:
+                                # Brand new user, no profile row exists yet
+                                st.session_state.user_profile = None
+                                st.session_state.current_page = "onboarding"
+                                
+                            st.success("✅ Login Successful!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error("❌ Login failed: Invalid email or password.")
+        
+        # Sign up link
+        st.markdown("---")
+        st.markdown("**Don't have an account?** Click on the **Sign Up** tab to create one.", unsafe_allow_html=True)
 
-    # --- SIGN UP TAB ---
+    # ==================== SIGN UP TAB ====================
     with tab_signup:
-        st.subheader("Create a New Account")
-        signup_email = st.text_input("Email", key="signup_email")
-        signup_password = st.text_input("Password", type="password", key="signup_password")
-        signup_password_confirm = st.text_input("Confirm Password", type="password", key="signup_password_confirm")
+        st.subheader("Create Your Account")
+        st.markdown("Join thousands of students learning on EduMentor. It only takes 2 minutes!")
         
-        if st.button("Create Account"):
-            if signup_password != signup_password_confirm:
-                st.error("Passwords do not match!")
-            elif len(signup_password) < 6:
-                st.error("Password must be at least 6 characters.")
-            else:
-                with st.spinner("Creating account in Supabase..."):
-                    try:
-                        # Live Supabase Sign Up Call
-                        response = supabase.auth.sign_up({"email": signup_email, "password": signup_password})
-                        st.success("Account successfully created! You can now log in using the Log In tab.")
-                    except Exception as e:
-                        st.error(f"Sign up failed: {e}")
+        # Use form to group all fields
+        with st.form("signup_form", clear_on_submit=False):
+            st.markdown("### 📋 Basic Information")
+            
+            # Step 1: Basic Info (2 columns)
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                full_name = st.text_input(
+                    "Full Name *",
+                    placeholder="Ahmed Ali",
+                    help="Your first and last name"
+                )
+            
+            with col2:
+                date_of_birth = st.date_input(
+                    "Date of Birth (Optional)",
+                    value=None,
+                    help="We use this to personalize your learning experience"
+                )
+            
+            signup_email = st.text_input(
+                "Email Address *",
+                placeholder="your@email.com",
+                help="We'll send a verification link here"
+            )
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                signup_password = st.text_input(
+                    "Create Password *",
+                    type="password",
+                    placeholder="At least 8 characters",
+                    help="Use a mix of letters, numbers, and symbols for security"
+                )
+            
+            with col2:
+                signup_password_confirm = st.text_input(
+                    "Confirm Password *",
+                    type="password",
+                    placeholder="Repeat your password",
+                    help="Make sure it matches"
+                )
+            
+            st.markdown("---")
+            st.markdown("### 🎓 Learning Profile")
+            st.markdown("Help us understand your learning needs to personalize your experience.")
+            
+            # Step 2: Learning Profile (2 columns)
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                student_type = st.radio(
+                    "I am a... *",
+                    options=[
+                        "👶 Kid / Primary Student (Age 6–11)",
+                        "📚 Middle School Student (Age 12–14)",
+                        "🎓 High School Student (Age 15–18)",
+                        "🏫 University / College Student",
+                        "💼 Working Professional / Adult Learner",
+                        "👨‍👩‍👧 Parent / Guardian (for a child)"
+                    ]
+                )
+            
+            with col2:
+                preferred_language = st.selectbox(
+                    "Preferred Language *",
+                    options=["English", "Urdu", "Bilingual (English + Urdu)"],
+                    index=0,
+                    help="You can change this anytime"
+                )
+                
+                education_level = st.selectbox(
+                    "Current Education Level *",
+                    options=[
+                        "Primary (Grades 1–5)",
+                        "Middle (Grades 6–8)",
+                        "Secondary / Matric (Grades 9–10)",
+                        "Intermediate / FSc (Grades 11–12)",
+                        "Undergraduate / Bachelor",
+                        "Postgraduate / Master+",
+                        "Other / Not Sure"
+                    ],
+                    index=0
+                )
+            
+            st.markdown("---")
+            
+            # Terms & Conditions
+            accept_terms = st.checkbox(
+                "I agree to the Terms of Service and Privacy Policy *",
+                help="Read our terms before signing up"
+            )
+            
+            submit_signup = st.form_submit_button("🚀 Create My Account", use_container_width=True)
+            
+            if submit_signup:
+                # Validation
+                errors = []
+                
+                if not full_name or len(full_name.strip()) < 2:
+                    errors.append("Please enter your full name (at least 2 characters).")
+                
+                if not signup_email or "@" not in signup_email:
+                    errors.append("Please enter a valid email address.")
+                
+                if not signup_password or len(signup_password) < 8:
+                    errors.append("Password must be at least 8 characters long.")
+                
+                if signup_password != signup_password_confirm:
+                    errors.append("Passwords do not match. Please try again.")
+                
+                if not accept_terms:
+                    errors.append("You must accept the Terms of Service to continue.")
+                
+                if errors:
+                    for error in errors:
+                        st.error(error)
+                else:
+                    # All validations passed, proceed to Supabase sign up
+                    with st.spinner("🔐 Creating your account..."):
+                        try:
+                            # Create auth account
+                            response = supabase.auth.sign_up({
+                                "email": signup_email, 
+                                "password": signup_password
+                            })
+                            
+                            # Store signup data in session for the onboarding page
+                            st.session_state.logged_in = True
+                            st.session_state.user_id = response.user.id
+                            st.session_state.current_page = "signup_onboarding"
+                            st.session_state.signup_data = {
+                                "full_name": full_name,
+                                "email": signup_email,
+                                "date_of_birth": str(date_of_birth) if date_of_birth else None,
+                                "student_type": student_type,
+                                "preferred_language": preferred_language,
+                                "education_level": education_level,
+                                "onboarding_complete": False
+                            }
+                            
+                            st.success("✅ Account created successfully! Let's set up your learning profile.")
+                            st.rerun()
+                            
+                        except Exception as e:
+                            error_msg = str(e)
+                            if "already registered" in error_msg.lower():
+                                st.error("❌ This email is already registered. Please log in instead.")
+                            else:
+                                st.error(f"❌ Sign up failed: {error_msg}")
 
-# --- PAGE: RICH ONBOARDING & PROFILE EDIT ---
-def show_onboarding():
-    # Fetch existing profile data if it exists (for the "Edit Profile" feature)
-    profile = st.session_state.get("user_profile") or {}
+# --- PAGE: POST-SIGNUP ONBOARDING & PERSONALIZATION ---
+def show_signup_onboarding():
+    """Onboarding page immediately after sign-up - collects learning interests and city"""
     
-    st.title("✨ Personalize Your Profile")
-    st.markdown("Update your details so EduMentor can adapt to your needs.")
+    st.title("🎯 Let's Personalize Your Learning")
+    st.markdown("Tell us what you want to learn and we'll create a perfect study plan for you!")
     
-    with st.form("onboarding_form"):
-        st.subheader("1. The Basics")
-        full_name = st.text_input("Full Name *", value=profile.get("full_name", ""))
+    # Get the signup data from session
+    signup_data = st.session_state.get("signup_data", {})
+    user_id = st.session_state.get("user_id")
+    
+    with st.form("onboarding_personalization_form"):
+        st.markdown("### 📚 What Do You Want to Learn?")
+        st.markdown("Select all topics that interest you:")
+        
+        # Multi-select learning interests
+        learning_interests = st.multiselect(
+            "Learning Interests *",
+            options=[
+                "🤖 AI Fundamentals",
+                "📐 Mathematics",
+                "🔬 Science",
+                "📖 English Language",
+                "💻 Programming",
+                "📝 Exam Preparation",
+                "🧠 General Knowledge",
+                "🗣️ Communication Skills",
+                "💼 Career Guidance"
+            ],
+            help="Choose as many as you like. You can change these anytime.",
+            default=[],
+            label_visibility="collapsed"
+        )
+        
+        st.markdown("---")
+        st.markdown("### 📍 Location & Background")
         
         col1, col2 = st.columns(2)
         
-        # Helper lists for dropdowns
-        grade_options = ["Primary (Grade 1–5)", "Middle (Grade 6–8)", "Secondary / Matric (Grade 9–10)", "Intermediate / FSc (Grade 11–12)", "University / Bachelor", "University / Master & Above"]
-        lang_options = ["English", "Urdu", "Bilingual (English + Urdu)"]
-        prov_options = ["Punjab", "Sindh", "KPK", "Balochistan", "Gilgit-Baltistan", "AJK", "Federal Capital"]
-        board_options = ["Not Applicable", "Federal Board", "Punjab Board", "Sindh Board", "Other"]
+        with col1:
+            your_city = st.text_input(
+                "Your City (Optional)",
+                placeholder="e.g., Karachi, Lahore, Islamabad",
+                help="Helps us show you relevant local resources"
+            )
+        
+        with col2:
+            how_heard = st.selectbox(
+                "How Did You Hear About EduMentor? (Optional)",
+                options=[
+                    "Select an option...",
+                    "📱 Social Media (Facebook/Instagram/TikTok)",
+                    "👥 Friend or Family Recommendation",
+                    "🔍 Google Search",
+                    "📺 YouTube / Online Ad",
+                    "🏫 School or Institution",
+                    "📰 News Article",
+                    "💬 Other"
+                ]
+            )
+        
+        st.markdown("---")
+        
+        # Submit button
+        submit_onboarding = st.form_submit_button("✨ Complete My Profile", use_container_width=True)
+        
+        if submit_onboarding:
+            if not learning_interests:
+                st.error("❌ Please select at least one learning interest.")
+            else:
+                with st.spinner("🚀 Setting up your personalized learning experience..."):
+                    try:
+                        # Combine signup data with onboarding data
+                        profile_data = {
+                            "id": user_id,
+                            **signup_data,
+                            "learning_interests": learning_interests,
+                            "city": your_city if your_city else None,
+                            "how_heard": how_heard if how_heard != "Select an option..." else None,
+                            "onboarding_complete": True,
+                            "created_at": "now()"
+                        }
+                        
+                        # Create profile in database
+                        supabase.table("profiles").upsert(profile_data).execute()
+                        
+                        # Update session
+                        st.session_state.user_profile = profile_data
+                        st.session_state.current_page = "dashboard"
+                        st.session_state.signup_data = None  # Clear signup data
+                        
+                        st.success("✅ Your profile is ready! Welcome to EduMentor! 🎉")
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"❌ Error saving your profile: {str(e)}")
+
+
+# --- PAGE: EDIT PROFILE (for existing users) ---
+def show_onboarding():
+    """Modern profile editing page for existing users"""
+    
+    # Fetch existing profile data
+    profile = st.session_state.get("user_profile") or {}
+    
+    st.title("✨ Update Your Profile")
+    st.markdown("Customize your learning preferences and keep your information up to date.")
+    
+    with st.form("edit_profile_form"):
+        st.markdown("### 📋 Basic Information")
+        
+        col1, col2 = st.columns(2)
         
         with col1:
-            # Safely set default index based on existing data
-            grade_idx = grade_options.index(profile.get("grade_level")) if profile.get("grade_level") in grade_options else 0
-            grade = st.selectbox("Grade / Education Level *", grade_options, index=grade_idx)
-            
-            age = st.number_input("Age", min_value=5, max_value=100, value=profile.get("age", 15))
-            
+            full_name = st.text_input(
+                "Full Name *",
+                value=profile.get("full_name", ""),
+                placeholder="Ahmed Ali",
+                help="Your first and last name"
+            )
+        
         with col2:
-            lang_idx = lang_options.index(profile.get("preferred_language")) if profile.get("preferred_language") in lang_options else 0
-            language = st.selectbox("Preferred Language *", lang_options, index=lang_idx)
+            date_of_birth = st.date_input(
+                "Date of Birth",
+                value=None,
+                help="Optional: helps us personalize your learning"
+            )
+        
+        st.markdown("---")
+        st.markdown("### 🎓 Education & Preferences")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Grade/Education Level
+            grade_options = [
+                "Primary (Grades 1–5)",
+                "Middle (Grades 6–8)",
+                "Secondary / Matric (Grades 9–10)",
+                "Intermediate / FSc (Grades 11–12)",
+                "Undergraduate / Bachelor",
+                "Postgraduate / Master+",
+                "Other / Not Sure"
+            ]
+            grade_idx = grade_options.index(profile.get("education_level", "Secondary / Matric (Grades 9–10)")) if profile.get("education_level") in grade_options else 2
+            grade = st.selectbox(
+                "Education Level *",
+                grade_options,
+                index=grade_idx,
+                help="Your current or most recent education level"
+            )
             
-            prov_idx = prov_options.index(profile.get("province")) if profile.get("province") in prov_options else 0
-            province = st.selectbox("Province / Region *", prov_options, index=prov_idx)
+            # Age
+            age = st.number_input(
+                "Age",
+                min_value=5,
+                max_value=100,
+                value=profile.get("age", 15),
+                help="Helps personalize content difficulty"
+            )
+        
+        with col2:
+            # Preferred Language
+            lang_options = ["English", "Urdu", "Bilingual (English + Urdu)"]
+            lang_idx = lang_options.index(profile.get("preferred_language", "English")) if profile.get("preferred_language") in lang_options else 0
+            language = st.selectbox(
+                "Preferred Language *",
+                lang_options,
+                index=lang_idx,
+                help="Language for lessons and communication"
+            )
             
-        st.subheader("2. Your Academic Profile")
+            # City
+            city = st.text_input(
+                "Your City (Optional)",
+                value=profile.get("city", ""),
+                placeholder="e.g., Karachi, Lahore",
+                help="Helps show relevant local resources"
+            )
         
-        goals_options = ["Science", "Mathematics", "English", "Computer Science", "General Knowledge", "Exam Preparation", "Career Guidance"]
-        goals = st.multiselect("Learning Goals / Interests", goals_options, default=profile.get("learning_goals", []))
+        st.markdown("---")
+        st.markdown("### 🎯 Learning Profile")
         
-        board_idx = board_options.index(profile.get("academic_board")) if profile.get("academic_board") in board_options else 0
-        board = st.selectbox("Current Academic Board", board_options, index=board_idx)
+        # Learning Interests
+        learning_interests_options = [
+            "🤖 AI Fundamentals",
+            "📐 Mathematics",
+            "🔬 Science",
+            "📖 English Language",
+            "💻 Programming",
+            "📝 Exam Preparation",
+            "🧠 General Knowledge",
+            "🗣️ Communication Skills",
+            "💼 Career Guidance"
+        ]
         
-        challenges = st.text_area("Any Specific Learning Challenges? (Optional)", value=profile.get("learning_challenges", ""))
+        selected_interests = st.multiselect(
+            "Learning Interests *",
+            learning_interests_options,
+            default=profile.get("learning_interests", ["🤖 AI Fundamentals"]),
+            help="Choose topics you want to learn"
+        )
         
-        submit_profile = st.form_submit_button("Save Profile & Go to Dashboard")
+        # Learning Challenges
+        challenges = st.text_area(
+            "Any Specific Learning Challenges? (Optional)",
+            value=profile.get("learning_challenges", ""),
+            placeholder="e.g., I struggle with mathematics word problems...",
+            help="Help us understand your needs"
+        )
+        
+        # Academic Board (Pakistan-specific)
+        board_options = [
+            "Federal Board",
+            "Punjab Board",
+            "Sindh Board",
+            "KPK Board",
+            "Balochistan Board",
+            "AJK Board",
+            "Not Applicable"
+        ]
+        board_idx = board_options.index(profile.get("academic_board", "Federal Board")) if profile.get("academic_board") in board_options else 0
+        board = st.selectbox(
+            "Academic Board (Optional)",
+            board_options,
+            index=board_idx,
+            help="Your school or college's exam board"
+        )
+        
+        st.markdown("---")
+        
+        # Submit button
+        submit_profile = st.form_submit_button("💾 Save Changes", use_container_width=True)
         
         if submit_profile:
-            if full_name:
-                with st.spinner("Saving your adaptive profile..."):
+            if not full_name or len(full_name.strip()) < 2:
+                st.error("❌ Please enter your full name (at least 2 characters).")
+            elif not selected_interests:
+                st.error("❌ Please select at least one learning interest.")
+            else:
+                with st.spinner("💾 Saving your profile..."):
                     try:
-                        # THE FIX: Use UPSERT instead of INSERT
                         profile_data = {
                             "id": st.session_state.user_id,
                             "full_name": full_name,
-                            "grade_level": grade,
+                            "date_of_birth": str(date_of_birth) if date_of_birth else profile.get("date_of_birth"),
+                            "education_level": grade,
                             "age": age,
                             "preferred_language": language,
-                            "province": province,
-                            "learning_goals": goals,
+                            "city": city if city else None,
+                            "learning_interests": selected_interests,
+                            "learning_challenges": challenges if challenges else None,
                             "academic_board": board,
-                            "learning_challenges": challenges,
                             "onboarding_complete": True
                         }
-                        # Upsert will create a new row if it doesn't exist, or update it if it does!
+                        
+                        # Upsert profile
                         supabase.table("profiles").upsert(profile_data).execute()
                         
-                        # Update local memory and push to dashboard
+                        # Update session
                         st.session_state.user_profile = profile_data
                         st.session_state.current_page = "dashboard"
-                        st.success("Profile saved successfully!")
+                        
+                        st.success("✅ Profile updated successfully!")
                         st.rerun()
+                        
                     except Exception as e:
-                        st.error(f"Error saving profile: {e}")
-            else:
-                st.error("Please enter your Full Name to continue.")
+                        st.error(f"❌ Error saving profile: {str(e)}")
 
 # --- PAGE 2: USER DASHBOARD ---
 def show_dashboard():
@@ -183,19 +535,21 @@ def show_dashboard():
     
     # Safely get the name (fallback to "Student" if missing)
     display_name = profile.get('full_name', 'Student')
-    grade = profile.get('grade_level', 'Beginner')
+    education_level = profile.get('education_level', 'Beginner')
     language = profile.get('preferred_language', 'English')
     
     st.sidebar.title(f"👋 Hello, {display_name.split()[0]}!")
-    st.sidebar.markdown(f"**Grade:** {grade} | **Lang:** {language}")
+    st.sidebar.markdown(f"**Level:** {education_level} | **Lang:** {language}")
     
     st.sidebar.markdown("---")
     if st.sidebar.button("⚙️ Edit Profile"):
         st.session_state.current_page = "onboarding"
         st.rerun()
     
-    if st.sidebar.button("Log Out"):
+    if st.sidebar.button("🚪 Log Out"):
         st.session_state.logged_in = False
+        st.session_state.user_id = None
+        st.session_state.user_profile = {}
         st.session_state.current_page = "signup"
         st.rerun()
 
@@ -213,12 +567,12 @@ def show_dashboard():
     with st.container(border=True):
         st.markdown("### 🤖 AI Fundamentals: Adaptive Course")
         
-        # Format learning goals nicely for the UI
-        goals_list = profile.get('learning_goals', ['Technology'])
-        goals_str = ", ".join(goals_list) if isinstance(goals_list, list) else goals_list
+        # Format learning interests nicely for the UI
+        interests_list = profile.get('learning_interests', ['🤖 AI Fundamentals'])
+        interests_str = ", ".join(interests_list) if isinstance(interests_list, list) else interests_list
         
-        st.markdown(f"Customized for a **{profile.get('age', 15)}-year-old** in **{grade}** interested in **{goals_str}**.")
-        st.progress(10) 
+        st.markdown(f"Customized for a **{profile.get('age', 15)}-year-old** learning **{interests_str}**.")
+        st.progress(0.10) 
         
         if st.button("Resume Learning - Module 1"):
             st.session_state.current_page = "course_ui"
@@ -422,25 +776,33 @@ def show_course_ui():
                     except Exception as e:
                         st.error(f"Error: {e}")
 
-# --- THE NEW MASTER ROUTER ---
-# Put this at the very bottom of your file to control the flow!
+# --- THE MASTER ROUTER ---
+# Controls the entire app flow based on authentication and page state
 
-# --- THE NEW MASTER ROUTER ---
 if st.session_state.logged_in == False:
+    # Not authenticated - show login and sign-up
     show_auth_page() 
     
 elif st.session_state.logged_in == True:
-    # 1. Force onboarding if it's their very first time
-    if not st.session_state.get("user_profile") or st.session_state.user_profile.get("onboarding_complete") != True:
-        show_onboarding() 
+    # Authenticated user - route based on current page
+    
+    if st.session_state.current_page == "signup_onboarding":
+        # New user after sign-up - collect learning interests
+        show_signup_onboarding()
         
-    # 2. Allow them to access the profile editor intentionally
     elif st.session_state.current_page == "onboarding":
+        # Edit profile page for existing users
         show_onboarding()
         
-    # 3. Standard routing
     elif st.session_state.current_page == "dashboard":
+        # Main dashboard
         show_dashboard() 
         
     elif st.session_state.current_page == "course_ui":
+        # Learning interface
         show_course_ui()
+        
+    else:
+        # Fallback - if no valid page set, show dashboard
+        st.session_state.current_page = "dashboard"
+        st.rerun()
